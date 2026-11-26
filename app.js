@@ -131,6 +131,16 @@ class MangaVerseApp {
     this.autoScrollSpeed = 2;
     this.autoScrollRaf = null;
 
+    // Online Comic Translation Preferences & Cache
+    this.translatePrefs = this.loadFromStorage('mangaverse_translate_prefs_v1', {
+      mode: 'free', // 'free' | 'gemini'
+      sourceLang: 'eng', // 'eng' | 'jpn' | 'chi_sim' | 'kor'
+      geminiKey: '',
+      showOverlay: true,
+    });
+    this.pageTranslations = new Map();
+    this.isTranslatingChapter = false;
+
     // Persistent User Library
     this.bookmarks = this.loadFromStorage(STORAGE_KEYS.BOOKMARKS, []);
     this.history = this.loadFromStorage(STORAGE_KEYS.HISTORY, []);
@@ -145,6 +155,7 @@ class MangaVerseApp {
   async init() {
     this.initTheme();
     this.applyReaderPrefsToUI();
+    this.syncTranslatePrefsUI();
     this.updateCardLayoutButtons();
     this.updateLibraryBadges();
     this.renderGenrePills();
@@ -3297,7 +3308,7 @@ class MangaVerseApp {
             </button>
           </div>
 
-          <div class="relative rounded-2xl overflow-hidden bg-slate-900 min-h-[480px] flex items-center justify-center">
+          <div class="relative rounded-2xl overflow-hidden bg-slate-900 min-h-[480px] flex items-center justify-center" data-page-index="${this.singlePageIndex + 1}">
             ${
               pageObj.drmData
                 ? `<canvas
@@ -3312,12 +3323,25 @@ class MangaVerseApp {
                     onerror="app.handlePageImageError(this, '${this.escapeAttr(fallbackUrl || '')}')"
                   />`
             }
+            <div class="translation-overlay-layer absolute inset-0 pointer-events-none overflow-hidden"></div>
+            <button
+              type="button"
+              onclick="event.stopPropagation(); app.translateReaderPage(${this.singlePageIndex})"
+              data-translate-btn="${this.singlePageIndex}"
+              class="absolute top-3 right-3 z-20 px-2.5 py-1.5 rounded-xl bg-slate-950/80 hover:bg-indigo-600 border border-indigo-400/40 text-indigo-200 hover:text-white text-[11px] font-bold shadow-lg backdrop-blur transition flex items-center gap-1"
+            >
+              <span>🌐 Dịch trang ${this.singlePageIndex + 1}</span>
+            </button>
             <div onclick="app.changeSinglePage(-1)" title="Trang trước" class="absolute inset-y-0 left-0 w-1/3 cursor-pointer"></div>
             <div onclick="app.changeSinglePage(1)" title="Trang tiếp theo" class="absolute inset-y-0 right-0 w-2/3 cursor-pointer"></div>
           </div>
+          <div id="translation-sub-${this.singlePageIndex}" class="hidden rounded-2xl bg-slate-900/95 border border-indigo-500/30 p-3 text-xs text-slate-200 space-y-1.5"></div>
         </div>
       `;
       this.initDrmCanvases();
+      if (this.pageTranslations.has(activeUrl)) {
+        this.renderPageTranslationResult(this.singlePageIndex, this.pageTranslations.get(activeUrl));
+      }
       return;
     }
 
@@ -3327,31 +3351,311 @@ class MangaVerseApp {
         const fallbackUrl = useHd ? p.saverUrl : p.hdUrl || p.saverUrl;
         return `
       <div class="reader-page-wrapper relative bg-[#0b101d] min-h-[220px] flex flex-col items-center justify-center" data-page-index="${idx + 1}">
-        ${
-          p.drmData
-            ? `<canvas
-                data-drm-url="${this.escapeAttr(activeUrl)}"
-                data-drm-code="${this.escapeAttr(p.drmData)}"
-                class="reader-page-img w-full"
-              ></canvas>`
-            : `<img
-                src="${this.escapeAttr(activeUrl)}"
-                alt="Trang ${idx + 1}"
-                loading="${idx < 3 ? 'eager' : 'lazy'}"
-                onload="this.parentElement.classList.remove('min-h-[220px]')"
-                onerror="app.handlePageImageError(this, '${this.escapeAttr(fallbackUrl || '')}', ${idx + 1})"
-                class="reader-page-img w-full"
-              />`
-        }
-        <span class="absolute bottom-2 right-2 px-2 py-0.5 rounded bg-slate-950/60 text-[10px] text-slate-400 pointer-events-none">
-          ${idx + 1}/${total}
-        </span>
+        <div class="relative w-full flex justify-center">
+          ${
+            p.drmData
+              ? `<canvas
+                  data-drm-url="${this.escapeAttr(activeUrl)}"
+                  data-drm-code="${this.escapeAttr(p.drmData)}"
+                  class="reader-page-img w-full"
+                ></canvas>`
+              : `<img
+                  src="${this.escapeAttr(activeUrl)}"
+                  alt="Trang ${idx + 1}"
+                  loading="${idx < 3 ? 'eager' : 'lazy'}"
+                  onload="this.closest('.reader-page-wrapper')?.classList.remove('min-h-[220px]')"
+                  onerror="app.handlePageImageError(this, '${this.escapeAttr(fallbackUrl || '')}', ${idx + 1})"
+                  class="reader-page-img w-full"
+                />`
+          }
+          <div class="translation-overlay-layer absolute inset-0 pointer-events-none overflow-hidden"></div>
+          <button
+            type="button"
+            onclick="app.translateReaderPage(${idx})"
+            data-translate-btn="${idx}"
+            class="absolute top-2.5 right-2.5 z-20 px-2.5 py-1 rounded-xl bg-slate-950/75 hover:bg-indigo-600 border border-indigo-400/40 text-indigo-200 hover:text-white text-[11px] font-bold shadow-md backdrop-blur transition"
+          >
+            🌐 Dịch trang ${idx + 1}
+          </button>
+          <span class="absolute bottom-2 right-2 px-2 py-0.5 rounded bg-slate-950/60 text-[10px] text-slate-400 pointer-events-none">
+            ${idx + 1}/${total}
+          </span>
+        </div>
+        <div id="translation-sub-${idx}" class="hidden w-full bg-[#0f172a] border-t border-indigo-500/30 p-3 text-xs text-slate-200 space-y-1.5"></div>
       </div>
     `;
       })
       .join('');
 
     this.initDrmCanvases();
+    this.currentChapterPages.forEach((p, idx) => {
+      const activeUrl = useHd ? p.hdUrl || p.saverUrl : p.saverUrl;
+      if (this.pageTranslations.has(activeUrl)) {
+        this.renderPageTranslationResult(idx, this.pageTranslations.get(activeUrl));
+      }
+    });
+  }
+
+  /* ========================================================================
+     ONLINE COMIC TRANSLATOR (FREE TESSERACT OCR + GOOGLE TRANSLATE & GEMINI VISION)
+     ======================================================================== */
+  toggleTranslateDrawer() {
+    const drawer = document.getElementById('reader-translate-drawer');
+    if (drawer) {
+      drawer.classList.toggle('hidden');
+      this.syncTranslatePrefsUI();
+    }
+  }
+
+  syncTranslatePrefsUI() {
+    const modeEl = document.getElementById('translate-mode-select');
+    const langEl = document.getElementById('translate-lang-select');
+    const keyEl = document.getElementById('translate-gemini-key-input');
+    const toggleBtn = document.getElementById('translate-overlay-toggle-btn');
+
+    if (modeEl) modeEl.value = this.translatePrefs.mode || 'free';
+    if (langEl) langEl.value = this.translatePrefs.sourceLang || 'eng';
+    if (keyEl) keyEl.value = this.translatePrefs.geminiKey || '';
+    if (toggleBtn) {
+      toggleBtn.textContent = this.translatePrefs.showOverlay ? '👁️ Hiện chữ dịch: BẬT' : '👁️ Hiện chữ dịch: TẮT';
+    }
+  }
+
+  updateTranslatePrefs(key, value) {
+    this.translatePrefs[key] = value;
+    localStorage.setItem('mangaverse_translate_prefs_v1', JSON.stringify(this.translatePrefs));
+    if (key === 'mode' && value === 'gemini' && !this.translatePrefs.geminiKey.trim()) {
+      this.showToast('✨ Hãy dán Gemini API Key (miễn phí trên Google AI Studio) để dùng Gemini Vision!');
+    }
+  }
+
+  toggleTranslationOverlays() {
+    this.translatePrefs.showOverlay = !this.translatePrefs.showOverlay;
+    localStorage.setItem('mangaverse_translate_prefs_v1', JSON.stringify(this.translatePrefs));
+    this.syncTranslatePrefsUI();
+    document.querySelectorAll('.translation-overlay-layer').forEach((el) => {
+      el.classList.toggle('hidden', !this.translatePrefs.showOverlay);
+    });
+  }
+
+  setTranslateStatus(msg, isError = false) {
+    const bar = document.getElementById('translate-status-bar');
+    if (!bar) return;
+    if (!msg) {
+      bar.classList.add('hidden');
+      return;
+    }
+    bar.classList.remove('hidden');
+    bar.className = `px-3 py-2 rounded-xl border font-medium ${
+      isError
+        ? 'bg-rose-500/15 border-rose-500/35 text-rose-200'
+        : 'bg-indigo-500/10 border-indigo-500/25 text-indigo-200'
+    }`;
+    bar.textContent = msg;
+  }
+
+  ensureTesseractLoaded() {
+    if (window.Tesseract) return Promise.resolve(window.Tesseract);
+    if (this.tesseractLoadingPromise) return this.tesseractLoadingPromise;
+    this.tesseractLoadingPromise = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+      s.onload = () => resolve(window.Tesseract);
+      s.onerror = () => reject(new Error('Không tải được thư viện OCR Tesseract.js'));
+      document.head.appendChild(s);
+    });
+    return this.tesseractLoadingPromise;
+  }
+
+  async translateReaderPage(pageIdx) {
+    const pageObj = this.currentChapterPages[pageIdx];
+    if (!pageObj) return;
+
+    const useHd = !!this.readerPrefs.hdQuality;
+    const activeUrl = useHd ? pageObj.hdUrl || pageObj.saverUrl : pageObj.saverUrl;
+    const btn = document.querySelector(`[data-translate-btn="${pageIdx}"]`);
+
+    if (this.pageTranslations.has(activeUrl)) {
+      this.renderPageTranslationResult(pageIdx, this.pageTranslations.get(activeUrl));
+      return;
+    }
+
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = '⏳ Đang dịch...';
+    }
+
+    try {
+      let bubbles = [];
+      const useGemini = this.translatePrefs.mode === 'gemini' && (this.translatePrefs.geminiKey || '').trim().length > 10;
+
+      if (useGemini) {
+        this.setTranslateStatus(`✨ Gemini Vision AI đang đọc & dịch trang ${pageIdx + 1}...`);
+        const res = await fetch(`${API_BASE}/translate-image`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            imageUrl: activeUrl,
+            apiKey: this.translatePrefs.geminiKey.trim(),
+            sourceLang: this.translatePrefs.sourceLang || 'auto',
+            comicTitle: this.currentComic?.name || '',
+          }),
+        });
+        const j = await res.json();
+        if (!res.ok || j.status !== 'success') {
+          throw new Error(j.message || `HTTP ${res.status}`);
+        }
+        bubbles = j.data?.bubbles || [];
+      } else {
+        this.setTranslateStatus(`🆓 Đang quét chữ OCR (Tesseract) trên trang ${pageIdx + 1}...`);
+        const Tesseract = await this.ensureTesseractLoaded();
+        const imgResp = await fetch(activeUrl);
+        if (!imgResp.ok) throw new Error(`Không tải được ảnh trang ${pageIdx + 1}`);
+        const blob = await imgResp.blob();
+
+        // Measure image natural dimensions for % box mapping
+        const dims = await new Promise((resolve) => {
+          const im = new Image();
+          const objUrl = URL.createObjectURL(blob);
+          im.onload = () => {
+            URL.revokeObjectURL(objUrl);
+            resolve({ w: im.naturalWidth || 800, h: im.naturalHeight || 1200 });
+          };
+          im.onerror = () => {
+            URL.revokeObjectURL(objUrl);
+            resolve({ w: 800, h: 1200 });
+          };
+          im.src = objUrl;
+        });
+
+        const ocrLang = this.translatePrefs.sourceLang || 'eng';
+        const ocrRes = await Tesseract.recognize(blob, ocrLang);
+        const blocks = (ocrRes?.data?.paragraphs?.length ? ocrRes.data.paragraphs : ocrRes?.data?.lines) || [];
+
+        const validBlocks = blocks
+          .map((b) => ({
+            orig: String(b.text || '').replace(/\s+/g, ' ').trim(),
+            bbox: b.bbox || { x0: 0, y0: 0, x1: dims.w, y1: 100 },
+          }))
+          .filter((b) => b.orig.length >= 2 && /[a-zA-Z0-9\u3040-\u30ff\u4e00-\u9faf\uac00-\ud7af]/.test(b.orig));
+
+        if (validBlocks.length > 0) {
+          this.setTranslateStatus(`🌐 Đang dịch ${validBlocks.length} đoạn thoại sang Tiếng Việt...`);
+          const gSlMap = { eng: 'en', jpn: 'ja', chi_sim: 'zh-CN', kor: 'ko' };
+          const trRes = await fetch(`${API_BASE}/translate-text`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              texts: validBlocks.map((b) => b.orig),
+              sourceLang: gSlMap[ocrLang] || 'auto',
+            }),
+          });
+          const trJson = await trRes.json();
+          const translatedList = trJson?.data?.translations || [];
+
+          bubbles = validBlocks.map((b, i) => ({
+            box: [
+              Math.round((b.bbox.y0 / dims.h) * 1000),
+              Math.round((b.bbox.x0 / dims.w) * 1000),
+              Math.round((b.bbox.y1 / dims.h) * 1000),
+              Math.round((b.bbox.x1 / dims.w) * 1000),
+            ],
+            orig: b.orig,
+            vi: translatedList[i] || b.orig,
+          }));
+        }
+      }
+
+      this.pageTranslations.set(activeUrl, bubbles);
+      this.renderPageTranslationResult(pageIdx, bubbles);
+      this.setTranslateStatus(`✅ Đã dịch xong trang ${pageIdx + 1} (${bubbles.length} khung thoại)!`);
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = `✅ Đã dịch (${bubbles.length})`;
+      }
+    } catch (err) {
+      this.setTranslateStatus(`❌ Lỗi dịch trang ${pageIdx + 1}: ${err.message}`, true);
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = `🌐 Thử lại (${pageIdx + 1})`;
+      }
+    }
+  }
+
+  renderPageTranslationResult(pageIdx, bubbles) {
+    const wrapper = document.querySelector(`[data-page-index="${pageIdx + 1}"]`);
+    const overlay = wrapper?.querySelector('.translation-overlay-layer');
+    const subBox = document.getElementById(`translation-sub-${pageIdx}`);
+
+    if (overlay) {
+      overlay.classList.toggle('hidden', !this.translatePrefs.showOverlay);
+      overlay.innerHTML = (bubbles || [])
+        .map((b) => {
+          const [ymin, xmin, ymax, xmax] = Array.isArray(b.box) ? b.box : [50, 50, 150, 350];
+          const top = Math.max(0, Math.min(92, ymin / 10));
+          const left = Math.max(0, Math.min(88, xmin / 10));
+          const width = Math.max(14, Math.min(95 - left, (xmax - xmin) / 10));
+          const minHeight = Math.max(4, (ymax - ymin) / 10);
+          return `
+            <div
+              style="top:${top}%;left:${left}%;width:${width}%;min-height:${minHeight}%;"
+              class="absolute bg-white/95 text-slate-950 rounded-lg px-1.5 py-1 shadow-md border border-indigo-400/60 flex items-center justify-center text-center leading-tight font-bold text-[10px] sm:text-xs break-words"
+            >
+              ${this.escapeHtml(b.vi || '')}
+            </div>
+          `;
+        })
+        .join('');
+    }
+
+    if (subBox) {
+      if (!bubbles || bubbles.length === 0) {
+        subBox.classList.remove('hidden');
+        subBox.innerHTML = `<span class="text-slate-400">Không phát hiện đoạn thoại chữ rõ ràng trên trang ${pageIdx + 1}.</span>`;
+      } else {
+        subBox.classList.remove('hidden');
+        subBox.innerHTML = `
+          <div class="flex items-center justify-between text-[11px] font-bold text-indigo-300 pb-1 border-b border-slate-800">
+            <span>💬 Phụ đề trang ${pageIdx + 1} (${bubbles.length} khung thoại)</span>
+            <button onclick="document.getElementById('translation-sub-${pageIdx}').classList.add('hidden')" class="text-slate-400 hover:text-white">Ẩn</button>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+            ${bubbles
+              .map(
+                (b, i) => `
+              <div class="p-2 rounded-lg bg-slate-950/70 border border-slate-800">
+                <div class="text-emerald-300 font-bold">${i + 1}. ${this.escapeHtml(b.vi || '')}</div>
+                <div class="text-[10px] text-slate-400 mt-0.5">${this.escapeHtml(b.orig || '')}</div>
+              </div>
+            `
+              )
+              .join('')}
+          </div>
+        `;
+      }
+    }
+  }
+
+  async translateAllChapterPages() {
+    if (this.isTranslatingChapter) {
+      this.isTranslatingChapter = false;
+      this.setTranslateStatus('⏸️ Đã dừng dịch hàng loạt.');
+      return;
+    }
+    const total = this.currentChapterPages.length;
+    if (!total) return;
+
+    this.isTranslatingChapter = true;
+    const allBtn = document.getElementById('translate-all-chapter-btn');
+    if (allBtn) allBtn.textContent = '⏹️ Dừng Dịch Chương';
+
+    for (let i = 0; i < total; i++) {
+      if (!this.isTranslatingChapter || this.currentView !== 'reader') break;
+      await this.translateReaderPage(i);
+    }
+
+    this.isTranslatingChapter = false;
+    if (allBtn) allBtn.textContent = '⚡ Dịch Cả Chương Này';
   }
 
   initDrmCanvases() {

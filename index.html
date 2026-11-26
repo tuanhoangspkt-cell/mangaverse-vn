@@ -733,6 +733,17 @@
               ⚡ Nhanh
             </button>
 
+            <!-- Online Comic Translator Button -->
+            <button
+              id="reader-translate-toggle-btn"
+              onclick="app.toggleTranslateDrawer()"
+              title="Dịch ảnh truyện sang Tiếng Việt (Miễn phí OCR / Gemini Vision AI)"
+              class="px-2.5 py-1.5 rounded-xl bg-indigo-500/20 border border-indigo-500/40 hover:bg-indigo-500 text-indigo-300 hover:text-white text-xs font-bold flex items-center gap-1 transition"
+            >
+              <span>🌐</span>
+              <span class="hidden sm:inline">Dịch Việt</span>
+            </button>
+
             <!-- Auto Scroll Button -->
             <button
               id="reader-autoscroll-btn"
@@ -825,6 +836,78 @@
               </div>
               <input type="range" min="1" max="6" value="2" oninput="app.setAutoScrollSpeed(this.value)" class="w-full accent-emerald-500" />
             </div>
+          </div>
+        </div>
+
+        <!-- Online AI / Free Translator Drawer -->
+        <div id="reader-translate-drawer" class="hidden border-t border-indigo-500/30 bg-[#0d1526] px-4 py-4">
+          <div class="max-w-5xl mx-auto space-y-3 text-xs">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div class="flex items-center gap-2">
+                <span class="px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 font-extrabold">🌐 Dịch Truyện Online</span>
+                <span class="text-slate-400">Hỗ trợ dịch trực tiếp trang Tiếng Anh / Nhật / Trung sang Tiếng Việt ngay trên khung đọc</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <button
+                  id="translate-overlay-toggle-btn"
+                  onclick="app.toggleTranslationOverlays()"
+                  class="px-3 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-200 font-semibold hover:border-indigo-400 transition"
+                >
+                  👁️ Hiện chữ dịch: BẬT
+                </button>
+                <button
+                  id="translate-all-chapter-btn"
+                  onclick="app.translateAllChapterPages()"
+                  class="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-extrabold shadow-md shadow-indigo-500/25 transition"
+                >
+                  ⚡ Dịch Cả Chương Này
+                </button>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div class="space-y-1">
+                <label class="text-slate-400 font-bold block">Chế độ dịch</label>
+                <select
+                  id="translate-mode-select"
+                  onchange="app.updateTranslatePrefs('mode', this.value)"
+                  class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-semibold"
+                >
+                  <option value="free">🆓 Miễn Phí (OCR Tesseract + Google Dịch — Không cần Key)</option>
+                  <option value="gemini">✨ Gemini Vision AI (Dịch siêu chuẩn — Cần Gemini API Key)</option>
+                </select>
+              </div>
+
+              <div class="space-y-1">
+                <label class="text-slate-400 font-bold block">Ngôn ngữ gốc trên ảnh</label>
+                <select
+                  id="translate-lang-select"
+                  onchange="app.updateTranslatePrefs('sourceLang', this.value)"
+                  class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-semibold"
+                >
+                  <option value="eng">🇬🇧 Tiếng Anh (English — Mặc định)</option>
+                  <option value="jpn">🇯🇵 Tiếng Nhật (Japanese)</option>
+                  <option value="chi_sim">🇨🇳 Tiếng Trung (Chinese)</option>
+                  <option value="kor">🇰🇷 Tiếng Hàn (Korean)</option>
+                </select>
+              </div>
+
+              <div class="space-y-1">
+                <div class="flex items-center justify-between">
+                  <label class="text-slate-400 font-bold">Gemini API Key (Tùy chọn)</label>
+                  <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" class="text-indigo-400 hover:underline font-semibold">Lấy key miễn phí ↗</a>
+                </div>
+                <input
+                  id="translate-gemini-key-input"
+                  type="password"
+                  placeholder="Dán AIza... nếu chọn Gemini Vision"
+                  oninput="app.updateTranslatePrefs('geminiKey', this.value)"
+                  class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+            </div>
+
+            <div id="translate-status-bar" class="hidden px-3 py-2 rounded-xl bg-indigo-500/10 border border-indigo-500/25 text-indigo-200 font-medium"></div>
           </div>
         </div>
       </div>

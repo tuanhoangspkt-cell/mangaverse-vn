@@ -1518,10 +1518,145 @@ function sendJson(res, statusCode, payload) {
   res.writeHead(statusCode, {
     'Content-Type': 'application/json; charset=utf-8',
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Accept',
   });
   res.end(JSON.stringify(payload));
+}
+
+function readPostJson(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let totalLen = 0;
+    req.on('data', (chunk) => {
+      totalLen += chunk.length;
+      if (totalLen > 2 * 1024 * 1024) {
+        reject(new Error('Payload too large'));
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on('end', () => {
+      try {
+        const raw = Buffer.concat(chunks).toString('utf8');
+        resolve(raw ? JSON.parse(raw) : {});
+      } catch (e) {
+        reject(new Error('Invalid JSON body'));
+      }
+    });
+    req.on('error', reject);
+  });
+}
+
+async function translateTextFreeBatch({ texts = [], sourceLang = 'auto' }) {
+  const sl = sourceLang || 'auto';
+  const cleanTexts = (Array.isArray(texts) ? texts : [])
+    .map((t) => String(t || '').trim())
+    .slice(0, 40);
+  if (cleanTexts.length === 0) return [];
+
+  const results = await Promise.all(
+    cleanTexts.map(async (txt) => {
+      if (!txt) return '';
+      try {
+        const gUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${encodeURIComponent(sl)}&tl=vi&dt=t&q=${encodeURIComponent(txt)}`;
+        const r = await fetch(gUrl, { headers: { 'User-Agent': BROWSER_UA } });
+        if (!r.ok) return txt;
+        const data = await r.json();
+        const translated = Array.isArray(data?.[0])
+          ? data[0].map((part) => (Array.isArray(part) ? part[0] : '')).join('')
+          : txt;
+        return translated || txt;
+      } catch (_) {
+        return txt;
+      }
+    })
+  );
+  return results;
+}
+
+async function translateImageWithGemini({ imageUrl = '', apiKey = '', sourceLang = 'auto', comicTitle = '' }) {
+  if (!apiKey || !String(apiKey).trim()) {
+    throw new Error('Vui lòng nhập Gemini API Key để dùng chế độ Gemini Vision AI.');
+  }
+  if (!imageUrl) throw new Error('Thiếu URL ảnh trang truyện.');
+
+  let targetUrl = imageUrl;
+  if (targetUrl.includes('/api/img?url=')) {
+    try {
+      targetUrl = decodeURIComponent(targetUrl.split('/api/img?url=')[1].split('&')[0]);
+    } catch (_) {}
+  } else if (targetUrl.startsWith('/')) {
+    targetUrl = `${HOST_BASE}${targetUrl}`;
+  }
+
+  let referer = 'https://mangadex.org/';
+  let ua = USER_AGENT;
+  if (targetUrl.includes('beercloudy.com') || targetUrl.includes('nhattruyen') || targetUrl.includes('nettruyen')) {
+    referer = `${NETTRUYEN_BASE}/`;
+    ua = BROWSER_UA;
+  } else if (targetUrl.includes('truyenqq') || targetUrl.includes('otruyencdn.com')) {
+    referer = `${TRUYENQQ_BASE}/`;
+    ua = BROWSER_UA;
+  } else if (targetUrl.includes('lrclib.net') || targetUrl.includes('cuutruyen')) {
+    referer = 'https://cuutruyen.net/';
+    ua = BROWSER_UA;
+  } else if (targetUrl.includes('readdetectiveconan.com') || targetUrl.includes('mangapill.com')) {
+    referer = 'https://mangapill.com/';
+    ua = BROWSER_UA;
+  }
+
+  const imgRes = await fetch(targetUrl, { headers: { 'User-Agent': ua, 'Referer': referer } });
+  if (!imgRes.ok) throw new Error(`Không tải được ảnh nguồn (HTTP ${imgRes.status})`);
+  const mimeType = (imgRes.headers.get('content-type') || 'image/jpeg').split(';')[0];
+  const base64Data = Buffer.from(await imgRes.arrayBuffer()).toString('base64');
+
+  const prompt = `Bạn là biên dịch viên truyện tranh chuyên nghiệp (${comicTitle || 'Manga/Manhwa/Manhua'}).
+Hãy đọc toàn bộ chữ thoại trong các bong bóng thoại / khung lời dẫn của trang truyện này (ngôn ngữ gốc: ${sourceLang}).
+Với mỗi bong bóng thoại, hãy trả về tọa độ bounding box [ymin, xmin, ymax, xmax] theo thang 0-1000, nội dung gốc (orig), và bản dịch Tiếng Việt tự nhiên, đúng ngữ cảnh truyện tranh (vi).
+Chỉ trả về JSON hợp lệ theo đúng mẫu sau, không thêm markdown:
+{"bubbles":[{"box":[ymin,xmin,ymax,xmax],"orig":"...","vi":"..."}]}`;
+
+  const payload = {
+    contents: [
+      {
+        parts: [
+          { text: prompt },
+          { inlineData: { mimeType, data: base64Data } },
+        ],
+      },
+    ],
+    generationConfig: {
+      temperature: 0.2,
+      responseMimeType: 'application/json',
+    },
+  };
+
+  let gJson = null;
+  let lastErr = '';
+  for (const model of ['gemini-2.5-flash', 'gemini-2.0-flash']) {
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey.trim())}`;
+    const gRes = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (gRes.ok) {
+      gJson = await gRes.json();
+      break;
+    } else {
+      lastErr = await gRes.text().catch(() => `HTTP ${gRes.status}`);
+    }
+  }
+
+  if (!gJson) {
+    throw new Error(`Gemini API lỗi: ${lastErr.slice(0, 200)}`);
+  }
+
+  const rawText = gJson?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+  const cleaned = rawText.replace(/^```json\s*/i, '').replace(/```$/i, '').trim();
+  const parsed = JSON.parse(cleaned);
+  return Array.isArray(parsed?.bubbles) ? parsed.bubbles : [];
 }
 
 /* ==========================================================================
@@ -1531,7 +1666,7 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') {
     res.writeHead(204, {
       'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, OPTIONS',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Accept',
     });
     res.end();
@@ -1549,6 +1684,21 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/img') {
       const targetUrl = sp.get('url');
       await handleImageProxy(targetUrl, req, res);
+      return;
+    }
+
+    // 1a. Online Comic Translation Endpoints (Free Google Translate + Gemini Vision AI)
+    if (pathname === '/v1/api/translate-text' && req.method === 'POST') {
+      const body = await readPostJson(req);
+      const translations = await translateTextFreeBatch(body);
+      sendJson(res, 200, { status: 'success', data: { translations } });
+      return;
+    }
+
+    if (pathname === '/v1/api/translate-image' && req.method === 'POST') {
+      const body = await readPostJson(req);
+      const bubbles = await translateImageWithGemini(body);
+      sendJson(res, 200, { status: 'success', data: { bubbles } });
       return;
     }
 
