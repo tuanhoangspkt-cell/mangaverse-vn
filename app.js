@@ -3676,17 +3676,17 @@ class MangaVerseApp {
           const rawH = (ymax - ymin) / 10;
           // Guard: skip abnormally huge boxes that would cover the artwork
           if (rawW > 60 || rawH > 28) return '';
-          const top = Math.max(1, Math.min(90, ymin / 10));
-          const left = Math.max(1, Math.min(82, xmin / 10));
-          const width = Math.max(14, Math.min(36, 96 - left, rawW + 4));
+          const top = Math.max(1, Math.min(88, ymin / 10));
+          const left = Math.max(1, Math.min(72, xmin / 10));
+          const width = Math.max(18, Math.min(38, 96 - left, rawW + 6));
           return `
             <div
               onclick="event.stopPropagation(); this.classList.toggle('opacity-20');"
               title="${this.escapeAttr(`Gốc: ${b.orig || ''} (Bấm để làm mờ xem tranh)`)}"
-              style="top:${top}%;left:${left}%;width:${width}%;max-height:18%;"
-              class="pointer-events-auto cursor-pointer absolute bg-white/92 text-slate-950 rounded-lg px-1.5 py-1 shadow-lg border border-indigo-500/60 overflow-hidden text-center leading-snug font-bold text-[10px] sm:text-[11px] break-words transition-opacity"
+              style="top:${top}%;left:${left}%;width:${width}%;background-color:rgba(15,23,42,0.92);color:#ffffff;border:1.5px solid rgba(129,140,248,0.85);z-index:15;"
+              class="pointer-events-auto cursor-pointer absolute rounded-lg px-2 py-1 shadow-xl text-center leading-snug font-bold text-[11px] sm:text-xs break-words transition-opacity"
             >
-              <span class="text-[9px] text-indigo-600 font-extrabold mr-0.5">${idx + 1}.</span>${this.escapeHtml(b.vi || '')}
+              <span style="color:#fbbf24;font-weight:800;margin-right:3px;">${idx + 1}.</span><span style="color:#f8fafc;">${this.escapeHtml(b.vi || '')}</span>
             </div>
           `;
         })
