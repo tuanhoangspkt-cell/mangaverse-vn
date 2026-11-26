@@ -3507,40 +3507,120 @@ class MangaVerseApp {
         }
         bubbles = j.data?.bubbles || [];
       } else {
-        this.setTranslateStatus(`🆓 Đang quét chữ OCR (Tesseract) trên trang ${pageIdx + 1}...`);
+        this.setTranslateStatus(`🆓 Đang quét chữ OCR (Tesseract Sparse-Text) trên trang ${pageIdx + 1}...`);
         const Tesseract = await this.ensureTesseractLoaded();
         const imgResp = await fetch(activeUrl);
         if (!imgResp.ok) throw new Error(`Không tải được ảnh trang ${pageIdx + 1}`);
         const blob = await imgResp.blob();
 
-        // Measure image natural dimensions for % box mapping
-        const dims = await new Promise((resolve) => {
+        // Preprocess image onto high-contrast canvas (grayscale + contrast boost) for sharp comic bubble OCR
+        const { ocrBlob, w, h } = await new Promise((resolve) => {
           const im = new Image();
           const objUrl = URL.createObjectURL(blob);
           im.onload = () => {
             URL.revokeObjectURL(objUrl);
-            resolve({ w: im.naturalWidth || 800, h: im.naturalHeight || 1200 });
+            const nw = im.naturalWidth || 800;
+            const nh = im.naturalHeight || 1200;
+            try {
+              const cvs = document.createElement('canvas');
+              cvs.width = nw;
+              cvs.height = nh;
+              const ctx = cvs.getContext('2d');
+              ctx.filter = 'grayscale(100%) contrast(140%)';
+              ctx.drawImage(im, 0, 0, nw, nh);
+              cvs.toBlob((b) => resolve({ ocrBlob: b || blob, w: nw, h: nh }), 'image/png');
+            } catch (_) {
+              resolve({ ocrBlob: blob, w: nw, h: nh });
+            }
           };
           im.onerror = () => {
             URL.revokeObjectURL(objUrl);
-            resolve({ w: 800, h: 1200 });
+            resolve({ ocrBlob: blob, w: 800, h: 1200 });
           };
           im.src = objUrl;
         });
 
         const ocrLang = this.translatePrefs.sourceLang || 'eng';
-        const ocrRes = await Tesseract.recognize(blob, ocrLang);
-        const blocks = (ocrRes?.data?.paragraphs?.length ? ocrRes.data.paragraphs : ocrRes?.data?.lines) || [];
+        if (!this.ocrWorker || this.ocrWorkerLang !== ocrLang) {
+          if (this.ocrWorker) {
+            try { await this.ocrWorker.terminate(); } catch (_) {}
+          }
+          this.ocrWorker = await Tesseract.createWorker(ocrLang);
+          // PSM 11 = Sparse text (tìm các cụm chữ rải rác trong bong bóng thoại truyện tranh)
+          await this.ocrWorker.setParameters({ tessedit_pageseg_mode: '11' });
+          this.ocrWorkerLang = ocrLang;
+        }
 
-        const validBlocks = blocks
-          .map((b) => ({
-            orig: String(b.text || '').replace(/\s+/g, ' ').trim(),
-            bbox: b.bbox || { x0: 0, y0: 0, x1: dims.w, y1: 100 },
+        const ocrRes = await this.ocrWorker.recognize(ocrBlob);
+        const rawLines = Array.isArray(ocrRes?.data?.lines) ? ocrRes.data.lines : [];
+
+        // Filter out noisy/oversized boxes (never cover the whole page!)
+        const cleanLines = rawLines
+          .map((ln) => {
+            const txt = String(ln.text || '')
+              .replace(/[|\\/_~`^*=<>]+/g, ' ')
+              .replace(/\s+/g, ' ')
+              .trim();
+            const bb = ln.bbox || { x0: 0, y0: 0, x1: 100, y1: 40 };
+            const bw = (bb.x1 - bb.x0) / w;
+            const bh = (bb.y1 - bb.y0) / h;
+            return {
+              text: txt,
+              conf: ln.confidence || 0,
+              x0: bb.x0,
+              y0: bb.y0,
+              x1: bb.x1,
+              y1: bb.y1,
+              bw,
+              bh,
+            };
+          })
+          .filter((ln) => {
+            if (ln.conf < 48) return false;
+            if (ln.bw > 0.52 || ln.bh > 0.16) return false; // Skip oversized non-bubble noise
+            if (ocrLang === 'eng') {
+              return /[a-zA-Z]{2,}/.test(ln.text);
+            }
+            return ln.text.length >= 2 && /[\u3040-\u30ff\u4e00-\u9faf\uac00-\ud7afa-zA-Z]/.test(ln.text);
+          });
+
+        // Group nearby OCR lines belonging to the same speech bubble
+        cleanLines.sort((a, b) => a.y0 - b.y0 || a.x0 - b.x0);
+        const grouped = [];
+        for (const ln of cleanLines) {
+          const match = grouped.find((g) => {
+            const vGap = ln.y0 - g.y1;
+            const hOverlap = Math.min(ln.x1, g.x1) - Math.max(ln.x0, g.x0);
+            const minW = Math.min(ln.x1 - ln.x0, g.x1 - g.x0);
+            return vGap >= -12 && vGap <= h * 0.035 && hOverlap > -w * 0.05 && minW > 0;
+          });
+          if (match && (match.y1 - match.y0) / h < 0.22) {
+            match.texts.push(ln.text);
+            match.x0 = Math.min(match.x0, ln.x0);
+            match.y0 = Math.min(match.y0, ln.y0);
+            match.x1 = Math.max(match.x1, ln.x1);
+            match.y1 = Math.max(match.y1, ln.y1);
+          } else {
+            grouped.push({
+              texts: [ln.text],
+              x0: ln.x0,
+              y0: ln.y0,
+              x1: ln.x1,
+              y1: ln.y1,
+            });
+          }
+        }
+
+        const validBlocks = grouped
+          .map((g) => ({
+            orig: g.texts.join(' ').replace(/\s+/g, ' ').trim(),
+            bbox: g,
           }))
-          .filter((b) => b.orig.length >= 2 && /[a-zA-Z0-9\u3040-\u30ff\u4e00-\u9faf\uac00-\ud7af]/.test(b.orig));
+          .filter((b) => b.orig.length >= 2)
+          .slice(0, 30);
 
         if (validBlocks.length > 0) {
-          this.setTranslateStatus(`🌐 Đang dịch ${validBlocks.length} đoạn thoại sang Tiếng Việt...`);
+          this.setTranslateStatus(`🌐 Đang dịch ${validBlocks.length} khung thoại sang Tiếng Việt...`);
           const gSlMap = { eng: 'en', jpn: 'ja', chi_sim: 'zh-CN', kor: 'ko' };
           const trRes = await fetch(`${API_BASE}/translate-text`, {
             method: 'POST',
@@ -3555,10 +3635,10 @@ class MangaVerseApp {
 
           bubbles = validBlocks.map((b, i) => ({
             box: [
-              Math.round((b.bbox.y0 / dims.h) * 1000),
-              Math.round((b.bbox.x0 / dims.w) * 1000),
-              Math.round((b.bbox.y1 / dims.h) * 1000),
-              Math.round((b.bbox.x1 / dims.w) * 1000),
+              Math.round((b.bbox.y0 / h) * 1000),
+              Math.round((b.bbox.x0 / w) * 1000),
+              Math.round((b.bbox.y1 / h) * 1000),
+              Math.round((b.bbox.x1 / w) * 1000),
             ],
             orig: b.orig,
             vi: translatedList[i] || b.orig,
@@ -3590,18 +3670,23 @@ class MangaVerseApp {
     if (overlay) {
       overlay.classList.toggle('hidden', !this.translatePrefs.showOverlay);
       overlay.innerHTML = (bubbles || [])
-        .map((b) => {
-          const [ymin, xmin, ymax, xmax] = Array.isArray(b.box) ? b.box : [50, 50, 150, 350];
-          const top = Math.max(0, Math.min(92, ymin / 10));
-          const left = Math.max(0, Math.min(88, xmin / 10));
-          const width = Math.max(14, Math.min(95 - left, (xmax - xmin) / 10));
-          const minHeight = Math.max(4, (ymax - ymin) / 10);
+        .map((b, idx) => {
+          const [ymin, xmin, ymax, xmax] = Array.isArray(b.box) ? b.box : [50, 50, 120, 260];
+          const rawW = (xmax - xmin) / 10;
+          const rawH = (ymax - ymin) / 10;
+          // Guard: skip abnormally huge boxes that would cover the artwork
+          if (rawW > 60 || rawH > 28) return '';
+          const top = Math.max(1, Math.min(90, ymin / 10));
+          const left = Math.max(1, Math.min(82, xmin / 10));
+          const width = Math.max(14, Math.min(36, 96 - left, rawW + 4));
           return `
             <div
-              style="top:${top}%;left:${left}%;width:${width}%;min-height:${minHeight}%;"
-              class="absolute bg-white/95 text-slate-950 rounded-lg px-1.5 py-1 shadow-md border border-indigo-400/60 flex items-center justify-center text-center leading-tight font-bold text-[10px] sm:text-xs break-words"
+              onclick="event.stopPropagation(); this.classList.toggle('opacity-20');"
+              title="${this.escapeAttr(`Gốc: ${b.orig || ''} (Bấm để làm mờ xem tranh)`)}"
+              style="top:${top}%;left:${left}%;width:${width}%;max-height:18%;"
+              class="pointer-events-auto cursor-pointer absolute bg-white/92 text-slate-950 rounded-lg px-1.5 py-1 shadow-lg border border-indigo-500/60 overflow-hidden text-center leading-snug font-bold text-[10px] sm:text-[11px] break-words transition-opacity"
             >
-              ${this.escapeHtml(b.vi || '')}
+              <span class="text-[9px] text-indigo-600 font-extrabold mr-0.5">${idx + 1}.</span>${this.escapeHtml(b.vi || '')}
             </div>
           `;
         })
