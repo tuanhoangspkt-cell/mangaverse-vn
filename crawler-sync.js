@@ -308,22 +308,22 @@ const LEGENDARY_MANGA_TARGETS = [
   { title: 'Siêu Nhân Nguyên Tử (Astro Boy — Tetsuwan Atom)', authorName: 'Osamu Tezuka', mdId: 'ca4c84bb-7272-45aa-a22d-dc1282b52372', mpPath: '/manga/360/astro-boy', tags: ['Khoa Học Viễn Tưởng', 'Hành Động', 'Kinh Điển'], priority: 151 },
   { title: 'Đức Phật (Buddha — Osamu Tezuka)', authorName: 'Osamu Tezuka', mdId: '4e102d46-0a98-4249-8a42-98e4705b663e', mpPath: '/manga/672/buddha', tags: ['Lịch Sử', 'Triết Lý', 'Kinh Điển'], priority: 152 },
   { title: 'Chim Lửa (Phoenix / Hi no Tori — Osamu Tezuka)', authorName: 'Osamu Tezuka', mdId: 'cc647d62-3a2c-474b-ac4e-844256ab185d', mpPath: '/manga/3446/phoenix', tags: ['Giả Tưởng', 'Triết Lý', 'Kinh Điển'], priority: 153 },
-  { title: 'Dororo (Osamu Tezuka)', authorName: 'Osamu Tezuka', mdId: '07d858d0-1537-487f-8e1f-a32e1782206d', mpPath: '/manga/1042/dororo', tags: ['Hành Động', 'Siêu Nhiên', 'Cổ Đại'], priority: 154 },
+  { title: 'Dororo (Osamu Tezuka)', authorName: 'Osamu Tezuka', ntSlug: 'dororo', ctId: '899', mdId: '07d858d0-1537-487f-8e1f-a32e1782206d', mpPath: '/manga/1042/dororo', tags: ['Hành Động', 'Siêu Nhiên', 'Cổ Đại'], priority: 154 },
   { title: 'Bức Thư Gửi Adolf (Message to Adolf — Osamu Tezuka)', authorName: 'Osamu Tezuka', mdId: '16dc43f3-d6ba-4154-b445-a9d2e674c0eb', mpPath: '/manga/113/adolf-ni-tsugu', tags: ['Lịch Sử', 'Tâm Lý', 'Kịch Tính'], priority: 155 },
   { title: 'Ayako (Osamu Tezuka)', authorName: 'Osamu Tezuka', mdId: 'df64232c-cc30-4e9c-92e1-7ccba2b743b0', mpPath: '/manga/384/ayako', tags: ['Tâm Lý', 'Bí Ẩn', 'Seinen'], priority: 156 },
 
   // D. AKIRA TORIYAMA
-  { title: 'Bảy Viên Ngọc Rồng Siêu Cấp (Dragon Ball Super)', authorName: 'Akira Toriyama', ntSlug: 'bay-vien-ngoc-rong-sieu-cap', mdId: '37b87be0-b1f4-4507-affa-06c99ebb27f8', mpPath: '/manga/1069/dragon-ball-super', tags: ['Hành Động', 'Võ Thuật', 'Shounen'], priority: 157 },
-  { title: 'Tiến Sĩ Slump (Dr. Slump — Arale)', authorName: 'Akira Toriyama', mdId: '985e4ae6-7a36-42c5-ae12-f4291c58798c', mpPath: '/manga/1058/dr-slump', tags: ['Hài Hước', 'Khoa Học Viễn Tưởng', 'Kinh Điển'], priority: 158 },
+  { title: 'Bảy Viên Ngọc Rồng Siêu Cấp (Dragon Ball Super)', authorName: 'Akira Toriyama', ntSlug: 'dragon-ball-super', mdId: '37b87be0-b1f4-4507-affa-06c99ebb27f8', mpPath: '/manga/1069/dragon-ball-super', tags: ['Hành Động', 'Võ Thuật', 'Shounen'], priority: 157 },
+  { title: 'Tiến Sĩ Slump (Dr. Slump — Arale)', authorName: 'Akira Toriyama', ntSlug: 'dr-slump', ctId: '2685', mdId: '985e4ae6-7a36-42c5-ae12-f4291c58798c', mpPath: '/manga/1058/dr-slump', tags: ['Hài Hước', 'Khoa Học Viễn Tưởng', 'Kinh Điển'], priority: 158 },
   { title: 'Vùng Đất Cát (Sand Land — Akira Toriyama)', authorName: 'Akira Toriyama', mdId: '88d8271a-ed40-4874-b23f-a1ded5fc1ebf', mpPath: '/manga/3729/sand-land', tags: ['Phiêu Lưu', 'Hành Động', 'Hài Hước'], priority: 159 },
   { title: 'Tuần Tra Ngân Hà Jaco (Jaco the Galactic Patrolman)', authorName: 'Akira Toriyama', mdId: 'd22cf103-18fa-4fb0-bc2c-75695895c74b', tags: ['Hài Hước', 'Hành Động', 'Khoa Học Viễn Tưởng'], priority: 160 },
 
   // E. NAOKI URASAWA
-  { title: 'Những Chàng Trai Thế Kỷ 20 (20th Century Boys)', authorName: 'Naoki Urasawa', mdId: 'ad06790a-01e3-400c-a449-0ec152d6756a', mpPath: '/manga/11/20-seiki-shounen', tags: ['Bí Ẩn', 'Tâm Lý', 'Seinen'], priority: 161 },
+  { title: 'Những Chàng Trai Thế Kỷ 20 (20th Century Boys)', authorName: 'Naoki Urasawa', ntSlug: 'nhung-chang-trai-the-ki-20', ctId: '1860', mdId: 'ad06790a-01e3-400c-a449-0ec152d6756a', mpPath: '/manga/11/20-seiki-shounen', tags: ['Bí Ẩn', 'Tâm Lý', 'Seinen'], priority: 161 },
   { title: 'Những Chàng Trai Thế Kỷ 21 (21st Century Boys)', authorName: 'Naoki Urasawa', mdId: '1010ebf3-2859-4101-badc-034bd08132ff', mpPath: '/manga/46/21st-century-boys', tags: ['Bí Ẩn', 'Tâm Lý', 'Seinen'], priority: 162 },
   { title: 'Pluto — Khúc Tráng Ca Robot (Naoki Urasawa)', authorName: 'Naoki Urasawa', mdId: 'e171c073-4415-499b-85bc-ea93825127ac', mpPath: '/manga/3461/pluto', tags: ['Trinh Thám', 'Khoa Học Viễn Tưởng', 'Seinen'], priority: 163 },
-  { title: 'Billy Bat (Naoki Urasawa)', authorName: 'Naoki Urasawa', mdId: 'e5357466-c8a2-4259-9b02-2580185bd2bb', mpPath: '/manga/503/billy-bat', tags: ['Bí Ẩn', 'Lịch Sử', 'Seinen'], priority: 164 },
-  { title: 'Thám Tử Keaton (Master Keaton — Naoki Urasawa)', authorName: 'Naoki Urasawa', mpPath: '/manga/2818/master-keaton', tags: ['Trinh Thám', 'Phiêu Lưu', 'Seinen'], priority: 165 },
+  { title: 'Billy Bat (Naoki Urasawa)', authorName: 'Naoki Urasawa', ctId: '511', mdId: 'e5357466-c8a2-4259-9b02-2580185bd2bb', mpPath: '/manga/503/billy-bat', tags: ['Bí Ẩn', 'Lịch Sử', 'Seinen'], priority: 164 },
+  { title: 'Thám Tử Keaton (Master Keaton — Naoki Urasawa)', authorName: 'Naoki Urasawa', ctId: '295', mpPath: '/manga/2818/master-keaton', tags: ['Trinh Thám', 'Phiêu Lưu', 'Seinen'], priority: 165 },
   { title: 'Asadora! (Naoki Urasawa)', authorName: 'Naoki Urasawa', mdId: '9047286f-ea5b-475a-84cc-a2533983ffe9', mpPath: '/manga/336/asadora', tags: ['Lịch Sử', 'Kịch Tính', 'Seinen'], priority: 166 },
 
   // F. TOORU FUJISAWA (TOHRU FUJISAWA)

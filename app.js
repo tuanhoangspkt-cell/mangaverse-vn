@@ -132,8 +132,8 @@ class MangaVerseApp {
     this.autoScrollRaf = null;
 
     // Online Comic Translation Preferences & Cache
-    this.translatePrefs = this.loadFromStorage('mangaverse_translate_prefs_v1', {
-      mode: 'free', // 'free' | 'gemini'
+    this.translatePrefs = this.loadFromStorage('mangaverse_translate_prefs_v2', {
+      mode: 'ocrspace', // 'ocrspace' | 'free' | 'gemini'
       sourceLang: 'eng', // 'eng' | 'jpn' | 'chi_sim' | 'kor'
       geminiKey: '',
       showOverlay: true,
@@ -3423,7 +3423,7 @@ class MangaVerseApp {
 
   updateTranslatePrefs(key, value) {
     this.translatePrefs[key] = value;
-    localStorage.setItem('mangaverse_translate_prefs_v1', JSON.stringify(this.translatePrefs));
+    localStorage.setItem('mangaverse_translate_prefs_v2', JSON.stringify(this.translatePrefs));
     if (key === 'mode' && value === 'gemini' && !this.translatePrefs.geminiKey.trim()) {
       this.showToast('✨ Hãy dán Gemini API Key (miễn phí trên Google AI Studio) để dùng Gemini Vision!');
     }
@@ -3431,7 +3431,7 @@ class MangaVerseApp {
 
   toggleTranslationOverlays() {
     this.translatePrefs.showOverlay = !this.translatePrefs.showOverlay;
-    localStorage.setItem('mangaverse_translate_prefs_v1', JSON.stringify(this.translatePrefs));
+    localStorage.setItem('mangaverse_translate_prefs_v2', JSON.stringify(this.translatePrefs));
     this.syncTranslatePrefsUI();
     document.querySelectorAll('.translation-overlay-layer').forEach((el) => {
       el.classList.toggle('hidden', !this.translatePrefs.showOverlay);
@@ -3487,7 +3487,8 @@ class MangaVerseApp {
 
     try {
       let bubbles = [];
-      const useGemini = this.translatePrefs.mode === 'gemini' && (this.translatePrefs.geminiKey || '').trim().length > 10;
+      const mode = this.translatePrefs.mode || 'ocrspace';
+      const useGemini = mode === 'gemini' && (this.translatePrefs.geminiKey || '').trim().length > 10;
 
       if (useGemini) {
         this.setTranslateStatus(`✨ Gemini Vision AI đang đọc & dịch trang ${pageIdx + 1}...`);
@@ -3507,7 +3508,28 @@ class MangaVerseApp {
         }
         bubbles = j.data?.bubbles || [];
       } else {
-        this.setTranslateStatus(`🆓 Đang quét chữ OCR (Tesseract Sparse-Text) trên trang ${pageIdx + 1}...`);
+        let ocrSpaceDone = false;
+        if (mode === 'ocrspace') {
+          try {
+            this.setTranslateStatus(`⚡ OCR.space Engine đang quét & dịch trang ${pageIdx + 1}...`);
+            const res = await fetch(`${API_BASE}/translate-ocr-space`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                imageUrl: activeUrl,
+                sourceLang: this.translatePrefs.sourceLang || 'eng',
+              }),
+            });
+            const j = await res.json();
+            if (res.ok && j.status === 'success' && Array.isArray(j.data?.bubbles)) {
+              bubbles = j.data.bubbles;
+              ocrSpaceDone = true;
+            }
+          } catch (_) {}
+        }
+
+        if (!ocrSpaceDone) {
+          this.setTranslateStatus(`🆓 Đang quét chữ OCR (Tesseract Sparse-Text) trên trang ${pageIdx + 1}...`);
         const Tesseract = await this.ensureTesseractLoaded();
         const imgResp = await fetch(activeUrl);
         if (!imgResp.ok) throw new Error(`Không tải được ảnh trang ${pageIdx + 1}`);
@@ -3643,6 +3665,7 @@ class MangaVerseApp {
             orig: b.orig,
             vi: translatedList[i] || b.orig,
           }));
+        }
         }
       }
 

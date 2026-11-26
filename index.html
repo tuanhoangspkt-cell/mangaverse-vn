@@ -146,7 +146,7 @@
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
             <span class="hidden md:inline">Đồng Bộ Chap</span>
-            <span id="header-sync-count" class="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-emerald-500 text-slate-950">122.1K</span>
+            <span id="header-sync-count" class="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-emerald-500 text-slate-950">122.9K</span>
           </button>
 
           <!-- Random Comic Button -->
@@ -324,7 +324,7 @@
               onclick="app.setRepositorySource('synced_db')"
               class="source-repo-btn px-3 py-1.5 rounded-xl text-xs font-bold transition bg-slate-100 dark:bg-slate-800/90 text-slate-700 dark:text-slate-300 hover:border-emerald-500"
             >
-              📦 Đã Đồng Bộ (122.1K+ Chap)
+              📦 Đã Đồng Bộ (122.9K+ Chap)
             </button>
             <button
               type="button"
@@ -873,7 +873,8 @@
                   onchange="app.updateTranslatePrefs('mode', this.value)"
                   class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-semibold"
                 >
-                  <option value="free">🆓 Miễn Phí (OCR Tesseract + Google Dịch — Không cần Key)</option>
+                  <option value="ocrspace">⚡ OCR.space Engine + Google Dịch (Miễn phí — Quét chữ Manga chuẩn nhất)</option>
+                  <option value="free">🆓 Tesseract OCR Offline + Google Dịch (Không cần Key)</option>
                   <option value="gemini">✨ Gemini Vision AI (Dịch siêu chuẩn — Cần Gemini API Key)</option>
                 </select>
               </div>
@@ -908,6 +909,31 @@
             </div>
 
             <div id="translate-status-bar" class="hidden px-3 py-2 rounded-xl bg-indigo-500/10 border border-indigo-500/25 text-indigo-200 font-medium"></div>
+
+            <!-- Browser Extension Quick Install (Inpainting / Bubble Replacement) -->
+            <div class="pt-2 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+              <span class="text-slate-400">
+                💡 <strong class="text-slate-200">Mẹo đọc sướng nhất (Tự xóa chữ gốc trong bong bóng):</strong> Cài thêm Extension trình duyệt hỗ trợ dịch trực tiếp trên trang web này:
+              </span>
+              <div class="flex flex-wrap items-center gap-2">
+                <a
+                  href="https://chromewebstore.google.com/search/Ichigo%20Reader%20Manga%20Translator"
+                  target="_blank"
+                  rel="noopener"
+                  class="px-2.5 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/35 text-emerald-300 hover:bg-emerald-500 hover:text-slate-950 font-bold transition"
+                >
+                  🧩 Cài Ichigo Reader (Chrome/Edge) ↗
+                </a>
+                <a
+                  href="https://chromewebstore.google.com/search/Manga%20Translator"
+                  target="_blank"
+                  rel="noopener"
+                  class="px-2.5 py-1 rounded-lg bg-sky-500/15 border border-sky-500/35 text-sky-300 hover:bg-sky-500 hover:text-slate-950 font-bold transition"
+                >
+                  🧩 Cài Manga Translator Extension ↗
+                </a>
+              </div>
+            </div>
           </div>
         </div>
       </div>

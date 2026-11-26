@@ -1659,6 +1659,116 @@ Chỉ trả về JSON hợp lệ theo đúng mẫu sau, không thêm markdown:
   return Array.isArray(parsed?.bubbles) ? parsed.bubbles : [];
 }
 
+async function translateImageWithOcrSpace({ imageUrl = '', ocrKey = '', sourceLang = 'eng' }) {
+  if (!imageUrl) throw new Error('Thiếu URL ảnh trang truyện.');
+  let targetUrl = imageUrl;
+  if (targetUrl.includes('/api/img?url=')) {
+    try {
+      targetUrl = decodeURIComponent(targetUrl.split('/api/img?url=')[1].split('&')[0]);
+    } catch (_) {}
+  } else if (targetUrl.startsWith('/')) {
+    targetUrl = `${HOST_BASE}${targetUrl}`;
+  }
+
+  let referer = 'https://mangadex.org/';
+  let ua = USER_AGENT;
+  if (targetUrl.includes('beercloudy.com') || targetUrl.includes('nhattruyen') || targetUrl.includes('nettruyen')) {
+    referer = `${NETTRUYEN_BASE}/`;
+    ua = BROWSER_UA;
+  } else if (targetUrl.includes('truyenqq') || targetUrl.includes('otruyencdn.com')) {
+    referer = `${TRUYENQQ_BASE}/`;
+    ua = BROWSER_UA;
+  } else if (targetUrl.includes('lrclib.net') || targetUrl.includes('cuutruyen')) {
+    referer = 'https://cuutruyen.net/';
+    ua = BROWSER_UA;
+  } else if (targetUrl.includes('readdetectiveconan.com') || targetUrl.includes('mangapill.com')) {
+    referer = 'https://mangapill.com/';
+    ua = BROWSER_UA;
+  }
+
+  const imgRes = await fetch(targetUrl, { headers: { 'User-Agent': ua, 'Referer': referer } });
+  if (!imgRes.ok) throw new Error(`Không tải được ảnh nguồn (HTTP ${imgRes.status})`);
+  const mimeType = (imgRes.headers.get('content-type') || 'image/jpeg').split(';')[0];
+  const buf = Buffer.from(await imgRes.arrayBuffer());
+  const dataUri = `data:${mimeType};base64,${buf.toString('base64')}`;
+
+  const langMap = { eng: 'eng', jpn: 'jpn', chi_sim: 'chs', kor: 'kor' };
+  const ocrLang = langMap[sourceLang] || 'eng';
+
+  const form = new URLSearchParams();
+  form.set('apikey', (ocrKey || '').trim() || 'helloworld');
+  form.set('base64Image', dataUri);
+  form.set('language', ocrLang);
+  form.set('isOverlayRequired', 'true');
+  form.set('OCREngine', '2');
+  form.set('scale', 'true');
+
+  const ocrRes = await fetch('https://api.ocr.space/parse/image', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: form.toString(),
+  });
+  if (!ocrRes.ok) throw new Error(`OCR.space HTTP ${ocrRes.status}`);
+  const ocrJson = await ocrRes.json();
+  if (ocrJson?.IsErroredOnProcessing) {
+    throw new Error(ocrJson.ErrorMessage?.[0] || 'OCR.space không xử lý được ảnh');
+  }
+
+  const overlayLines = ocrJson?.ParsedResults?.[0]?.TextOverlay?.Lines || [];
+  const parsedLines = overlayLines
+    .map((ln) => {
+      const words = Array.isArray(ln.Words) ? ln.Words : [];
+      if (words.length === 0) return null;
+      const x0 = Math.min(...words.map((w) => w.Left || 0));
+      const x1 = Math.max(...words.map((w) => (w.Left || 0) + (w.Width || 30)));
+      const y0 = ln.MinTop || words[0].Top || 0;
+      const y1 = y0 + (ln.MaxHeight || words[0].Height || 20);
+      const text = String(ln.LineText || '').trim();
+      return { text, x0, y0, x1, y1 };
+    })
+    .filter((ln) => ln && ln.text.length >= 2 && /[a-zA-Z0-9\u3040-\u30ff\u4e00-\u9faf\uac00-\ud7af]/.test(ln.text));
+
+  if (parsedLines.length === 0) return [];
+
+  // Estimate full image bounds from max coordinates or default 800x1200
+  const maxX = Math.max(800, ...parsedLines.map((l) => l.x1 * 1.05));
+  const maxY = Math.max(1200, ...parsedLines.map((l) => l.y1 * 1.05));
+
+  parsedLines.sort((a, b) => a.y0 - b.y0 || a.x0 - b.x0);
+  const grouped = [];
+  for (const ln of parsedLines) {
+    const match = grouped.find((g) => {
+      const vGap = ln.y0 - g.y1;
+      const hOverlap = Math.min(ln.x1, g.x1) - Math.max(ln.x0, g.x0);
+      return vGap >= -10 && vGap <= maxY * 0.035 && hOverlap > -maxX * 0.05;
+    });
+    if (match && (match.y1 - match.y0) / maxY < 0.22) {
+      match.texts.push(ln.text);
+      match.x0 = Math.min(match.x0, ln.x0);
+      match.y0 = Math.min(match.y0, ln.y0);
+      match.x1 = Math.max(match.x1, ln.x1);
+      match.y1 = Math.max(match.y1, ln.y1);
+    } else {
+      grouped.push({ texts: [ln.text], x0: ln.x0, y0: ln.y0, x1: ln.x1, y1: ln.y1 });
+    }
+  }
+
+  const gSlMap = { eng: 'en', jpn: 'ja', chi_sim: 'zh-CN', kor: 'ko' };
+  const texts = grouped.map((g) => g.texts.join(' ').replace(/\s+/g, ' ').trim());
+  const translations = await translateTextFreeBatch({ texts, sourceLang: gSlMap[sourceLang] || 'auto' });
+
+  return grouped.map((g, i) => ({
+    box: [
+      Math.round((g.y0 / maxY) * 1000),
+      Math.round((g.x0 / maxX) * 1000),
+      Math.round((g.y1 / maxY) * 1000),
+      Math.round((g.x1 / maxX) * 1000),
+    ],
+    orig: texts[i],
+    vi: translations[i] || texts[i],
+  }));
+}
+
 /* ==========================================================================
    HTTP SERVER ROUTER
    ========================================================================== */
@@ -1698,6 +1808,13 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/v1/api/translate-image' && req.method === 'POST') {
       const body = await readPostJson(req);
       const bubbles = await translateImageWithGemini(body);
+      sendJson(res, 200, { status: 'success', data: { bubbles } });
+      return;
+    }
+
+    if (pathname === '/v1/api/translate-ocr-space' && req.method === 'POST') {
+      const body = await readPostJson(req);
+      const bubbles = await translateImageWithOcrSpace(body);
       sendJson(res, 200, { status: 'success', data: { bubbles } });
       return;
     }
